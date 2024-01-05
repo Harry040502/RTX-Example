@@ -22,9 +22,11 @@ namespace RayTracingConsoleApp
             Vector3 lookAtPosition = new Vector3(width / 2, height / 2, 1000); // Look at the center of where the spheres are placed
             Camera camera = new Camera(cameraPosition, lookAtPosition, Vector3.UnitY);
 
+            Console.WriteLine($"Reflective Sphere Center: {reflectiveSphere.Center}, Radius: {reflectiveSphere.Radius}");
+            Console.WriteLine($"Colored Sphere Center: {coloredSphere.Center}, Radius: {coloredSphere.Radius}");
 
             // Define light direction
-            Vector3 lightDirection = Vector3.Normalize(new Vector3(-1, -1, -1));
+            Vector3 lightDirection = Vector3.Normalize(new Vector3(10, 100, 100));
 
             // Render the scene
             for (int y = 0; y < height; y++)
@@ -44,47 +46,38 @@ namespace RayTracingConsoleApp
 
         static Color TraceRay(Ray ray, Sphere[] spheres, Vector3 lightDirection, int depth)
         {
-            // Base case for recursion
             if (depth <= 0) return Color.FromArgb(10, 10, 10);
 
             Sphere closestSphere = null;
             float minDistance = float.MaxValue;
             Vector3 hitPoint = Vector3.Zero;
-            Vector3 normalAtHitPoint = Vector3.Zero;
             bool hit = false;
 
-            // Find the closest sphere intersection
             foreach (var sphere in spheres)
             {
-                if (sphere.RayIntersects(ray, out var distance) && distance < minDistance)
+                if (sphere.RayIntersects(ray, out var distance))
                 {
-                    minDistance = distance;
-                    hitPoint = ray.Origin + ray.Direction * distance;
-                    normalAtHitPoint = Vector3.Normalize(hitPoint - sphere.Center);
-                    closestSphere = sphere;
-                    hit = true;
+                    //Console.WriteLine($"Ray from {ray.Origin} in direction {ray.Direction} hit sphere at {ray.Origin + ray.Direction * distance}");
+                    if (distance < minDistance)
+                    {
+                        minDistance = distance;
+                        hitPoint = ray.Origin + ray.Direction * distance;
+                        closestSphere = sphere;
+                        hit = true;
+                    }
                 }
             }
 
-            // Calculate colour based on intersection
-            if (hit && closestSphere != null)
+            if (hit)
             {
-                float diffuse = Math.Max(Vector3.Dot(normalAtHitPoint, -Vector3.Normalize(lightDirection)), 0);
-                Color diffuseColor = ScaleColor(closestSphere.Color, diffuse);
-                Color ambientColor = ScaleColor(closestSphere.Color, 0.3f); // Ambient light
-
-                if (closestSphere.Reflective)
-                {
-                    Vector3 reflectDir = Vector3.Reflect(ray.Direction, normalAtHitPoint);
-                    Ray reflectRay = new Ray(hitPoint + reflectDir * 0.001f, reflectDir);
-                    Color reflectColor = TraceRay(reflectRay, spheres, lightDirection, depth - 1);
-                    return BlendColors(diffuseColor, reflectColor, closestSphere.Reflectivity);
-                }
-                return AddColors(diffuseColor, ambientColor);
+                // Continue with shading calculations...
+            }
+            else
+            {
+                //Console.WriteLine($"Ray from {ray.Origin} in direction {ray.Direction} missed all spheres.");
             }
 
-            // Environment colour for rays that don't hit anything
-            return Color.FromArgb(20, 20, 20);
+            return Color.FromArgb(20, 20, 20); // Environment color
         }
 
         static Color BlendColors(Color baseColor, Color reflectColor, float reflectivity)
@@ -134,17 +127,19 @@ namespace RayTracingConsoleApp
         public Ray GetRayThroughPixel(int x, int y, int imageWidth, int imageHeight)
         {
             float aspectRatio = (float)imageWidth / imageHeight;
-            float fov = 90.0f; // Field of view in degrees
-            float angle = (float)Math.Tan(Math.PI * 0.5 * fov / 180.0);
+            float fovRadians = MathF.PI / 4; // 45 degrees field of view in radians
+            float scale = MathF.Tan(fovRadians / 2);
 
-            // Map the pixel coordinate to [-1, 1] range (left to right and bottom to top)
-            float px = (2 * ((x + 0.5f) / imageWidth) - 1) * angle * aspectRatio;
-            float py = (1 - 2 * ((y + 0.5f) / imageHeight)) * angle;
+            // Convert screen position to camera space
+            float pixelNDCX = (x + 0.5f) / imageWidth * 2 - 1; // Normalized Device Coordinate X
+            float pixelNDCY = (y + 0.5f) / imageHeight * 2 - 1; // Normalized Device Coordinate Y
+            Vector3 pixelCameraSpace = new Vector3(pixelNDCX * scale * aspectRatio, -pixelNDCY * scale, 1);
 
-            Vector3 imagePoint = new Vector3(px, py, 1); // Set forward to 1 for the forward direction
-            Vector3 direction = Vector3.Normalize(Forward + imagePoint - Position);
+            // Convert camera space to world space
+            Vector3 pixelWorldSpace = Vector3.Transform(pixelCameraSpace, Matrix4x4.CreateLookAt(Position, Forward, Up));
+            Vector3 rayDirection = Vector3.Normalize(pixelWorldSpace - Position);
 
-            return new Ray(Position, direction);
+            return new Ray(Position, rayDirection);
         }
     }
 
@@ -179,12 +174,23 @@ namespace RayTracingConsoleApp
                 return false;
             }
 
-            float t0 = (-b - (float)Math.Sqrt(discriminant)) / (2.0f * a);
-            float t1 = (-b + (float)Math.Sqrt(discriminant)) / (2.0f * a);
+            float sqrtDiscriminant = (float)Math.Sqrt(discriminant);
+            float t0 = (-b - sqrtDiscriminant) / (2.0f * a);
+            float t1 = (-b + sqrtDiscriminant) / (2.0f * a);
 
-            if (t0 < 0 && t1 < 0) return false;
+            if (t0 > 0)
+            {
+                t = t0;
+            }
+            else if (t1 > 0)
+            {
+                t = t1;
+            }
+            else
+            {
+                return false;
+            }
 
-            t = Math.Min(t0, t1);
             return true;
         }
     }
