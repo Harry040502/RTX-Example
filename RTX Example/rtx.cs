@@ -18,30 +18,46 @@ namespace RayTracingConsoleApp
             Sphere[] spheres = { reflectiveSphere, coloredSphere };
 
             // Set up the camera to look at the center of the scene where the spheres are
-            Vector3 cameraPosition = new Vector3(width / 2, height / 2, -1000); // Centered on X and Y axis
-            Vector3 lookAtPosition = new Vector3(width / 2, height / 2, 1000); // Look at the center of where the spheres are placed
+            Vector3 cameraPosition = new Vector3(width / 2, height / 2, 0);
+            Vector3 lookAtPosition = new Vector3(width / 2, height / 2, 1000);
             Camera camera = new Camera(cameraPosition, lookAtPosition, Vector3.UnitY);
+            Console.WriteLine($"Camera Position: {camera.Position}");
+            Console.WriteLine($"Sphere Center: {coloredSphere.Center}, Radius: {coloredSphere.Radius}");
 
-            Console.WriteLine($"Reflective Sphere Center: {reflectiveSphere.Center}, Radius: {reflectiveSphere.Radius}");
-            Console.WriteLine($"Colored Sphere Center: {coloredSphere.Center}, Radius: {coloredSphere.Radius}");
+            Console.WriteLine($"Camera Position: {camera.Position}");
+            foreach (var sphere in spheres)
+            {
+                Console.WriteLine($"Sphere Position: {sphere.Center}, Radius: {sphere.Radius}");
+            }
 
             // Define light direction
-            Vector3 lightDirection = Vector3.Normalize(new Vector3(10, 100, 100));
+            Vector3 lightDirection = Vector3.Normalize(new Vector3(-1, -1, -1));
+
+            int hitCount = 0;
 
             // Render the scene
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
                 {
+
                     Ray ray = camera.GetRayThroughPixel(x, y, width, height);
+                    if ((x == 0 && y == 0) || (x == width - 1 && y == 0) || (x == 0 && y == height - 1) || (x == width - 1 && y == height - 1))
+                    {
+                        Console.WriteLine($"Ray direction at ({x}, {y}): {ray.Direction}");
+                    }
                     Color colour = TraceRay(ray, spheres, lightDirection, 3);
+                    if (colour != Color.FromArgb(20, 20, 20))
+                    {
+                        hitCount++;
+                    }
                     image.SetPixel(x, y, colour);
                 }
             }
 
             // Save the rendered image
             image.Save("raytraced_scene.png");
-            Console.WriteLine("Ray tracing completed. Image saved as 'raytraced_scene.png'");
+            Console.WriteLine($"Ray tracing completed. Image saved as 'raytraced_scene.png'. Spheres hit: {hitCount} times");
         }
 
         static Color TraceRay(Ray ray, Sphere[] spheres, Vector3 lightDirection, int depth)
@@ -57,7 +73,6 @@ namespace RayTracingConsoleApp
             {
                 if (sphere.RayIntersects(ray, out var distance))
                 {
-                    //Console.WriteLine($"Ray from {ray.Origin} in direction {ray.Direction} hit sphere at {ray.Origin + ray.Direction * distance}");
                     if (distance < minDistance)
                     {
                         minDistance = distance;
@@ -67,17 +82,32 @@ namespace RayTracingConsoleApp
                     }
                 }
             }
-
+            Color ambientColor = Color.FromArgb(20, 20, 20);
             if (hit)
             {
-                // Continue with shading calculations...
+                Vector3 normal = Vector3.Normalize(hitPoint - closestSphere.Center);
+                Vector3 lightDir = Vector3.Normalize(lightDirection);
+                float diffIntensity = Math.Max(Vector3.Dot(normal, lightDir), 0.0f);
+                
+                Color diffuseColor = ScaleColor(closestSphere.Color, diffIntensity);
+
+                if (closestSphere.Reflective)
+                {
+                    Vector3 offsetHitPoint = hitPoint + 0.001f * normal; // Small offset to the hit point to avoid self-intersection
+                    Vector3 reflectDir = Vector3.Reflect(ray.Direction, normal);
+                    Ray reflectRay = new Ray(offsetHitPoint, reflectDir);
+                    Color reflectColor = TraceRay(reflectRay, spheres, lightDirection, depth - 1);
+                    return BlendColors(diffuseColor, reflectColor, closestSphere.Reflectivity);
+                }
+                else
+                {
+                    return AddColors(diffuseColor, ambientColor);
+                }
             }
             else
             {
-                //Console.WriteLine($"Ray from {ray.Origin} in direction {ray.Direction} missed all spheres.");
+                return ambientColor; // Environment color
             }
-
-            return Color.FromArgb(20, 20, 20); // Environment color
         }
 
         static Color BlendColors(Color baseColor, Color reflectColor, float reflectivity)
@@ -127,18 +157,15 @@ namespace RayTracingConsoleApp
         public Ray GetRayThroughPixel(int x, int y, int imageWidth, int imageHeight)
         {
             float aspectRatio = (float)imageWidth / imageHeight;
-            float fovRadians = MathF.PI / 4; // 45 degrees field of view in radians
+            float fovRadians = MathF.PI / 3; // 45 degrees field of view in radians
             float scale = MathF.Tan(fovRadians / 2);
 
-            // Convert screen position to camera space
-            float pixelNDCX = (x + 0.5f) / imageWidth * 2 - 1; // Normalized Device Coordinate X
-            float pixelNDCY = (y + 0.5f) / imageHeight * 2 - 1; // Normalized Device Coordinate Y
-            Vector3 pixelCameraSpace = new Vector3(pixelNDCX * scale * aspectRatio, -pixelNDCY * scale, 1);
+            float pixelNDCX = (x + 0.5f) / imageWidth * 2 - 1;
+            float pixelNDCY = (y + 0.5f) / imageHeight * 2 - 1;
+            Vector3 pixelCameraSpace = new Vector3(pixelNDCX * scale * aspectRatio, -pixelNDCY * scale, -1);
 
-            // Convert camera space to world space
-            Vector3 pixelWorldSpace = Vector3.Transform(pixelCameraSpace, Matrix4x4.CreateLookAt(Position, Forward, Up));
-            Vector3 rayDirection = Vector3.Normalize(pixelWorldSpace - Position);
-
+            Vector3 right = Vector3.Normalize(Vector3.Cross(Up, Forward));
+            Vector3 rayDirection = Vector3.Normalize(pixelCameraSpace.X * right + pixelCameraSpace.Y * Up + pixelCameraSpace.Z * Forward);
             return new Ray(Position, rayDirection);
         }
     }
@@ -169,16 +196,21 @@ namespace RayTracingConsoleApp
             float c = Vector3.Dot(oc, oc) - Radius * Radius;
             float discriminant = b * b - 4 * a * c;
 
+
             if (discriminant < 0)
             {
-                return false;
+                return false; // No intersection
             }
 
             float sqrtDiscriminant = (float)Math.Sqrt(discriminant);
-            float t0 = (-b - sqrtDiscriminant) / (2.0f * a);
-            float t1 = (-b + sqrtDiscriminant) / (2.0f * a);
+            float t0 = (-b - sqrtDiscriminant) / (2 * a);
+            float t1 = (-b + sqrtDiscriminant) / (2 * a);
 
-            if (t0 > 0)
+            if (t0 > 0 && t1 > 0)
+            {
+                t = Math.Min(t0, t1);
+            }
+            else if (t0 > 0)
             {
                 t = t0;
             }
@@ -188,9 +220,8 @@ namespace RayTracingConsoleApp
             }
             else
             {
-                return false;
+                return false; // Both intersection points are behind the ray origin
             }
-
             return true;
         }
     }
