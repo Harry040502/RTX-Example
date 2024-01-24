@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Drawing.Printing;
 using System.Numerics;
 
 namespace RayTracingConsoleApp
@@ -13,17 +14,13 @@ namespace RayTracingConsoleApp
             Bitmap image = new Bitmap(width, height);
 
             // Adjust the positions of the spheres if necessary
-            Sphere reflectiveSphere = new Sphere(new Vector3(width / 2, height / 2, 1000), 150, Color.Gray, true, 0.9f);
-            Sphere coloredSphere = new Sphere(new Vector3(width / 2 + 150, height / 2, 1000), 100, Color.Red, false, 0.0f);
-            Sphere[] spheres = { reflectiveSphere, coloredSphere };
+            Sphere testSphere = new Sphere(new Vector3(width / 2, height / 2, 500), 300, Color.Red, true, 0.9f);
+            Sphere[] spheres = { testSphere };
 
             // Set up the camera to look at the center of the scene where the spheres are
             Vector3 cameraPosition = new Vector3(width / 2, height / 2, 0);
-            Vector3 lookAtPosition = new Vector3(width / 2, height / 2, 1000);
+            Vector3 lookAtPosition = new Vector3(width / 2, height / 2, 500);
             Camera camera = new Camera(cameraPosition, lookAtPosition, Vector3.UnitY);
-            Console.WriteLine($"Camera Position: {camera.Position}");
-            Console.WriteLine($"Sphere Center: {coloredSphere.Center}, Radius: {coloredSphere.Radius}");
-
             Console.WriteLine($"Camera Position: {camera.Position}");
             foreach (var sphere in spheres)
             {
@@ -40,13 +37,13 @@ namespace RayTracingConsoleApp
             {
                 for (int x = 0; x < width; x++)
                 {
-
                     Ray ray = camera.GetRayThroughPixel(x, y, width, height);
+                    Color colour = TraceRay(ray, spheres, lightDirection, 3);
                     if ((x == 0 && y == 0) || (x == width - 1 && y == 0) || (x == 0 && y == height - 1) || (x == width - 1 && y == height - 1))
                     {
                         Console.WriteLine($"Ray direction at ({x}, {y}): {ray.Direction}");
                     }
-                    Color colour = TraceRay(ray, spheres, lightDirection, 3);
+                    
                     if (colour != Color.FromArgb(20, 20, 20))
                     {
                         hitCount++;
@@ -162,7 +159,7 @@ namespace RayTracingConsoleApp
 
             float pixelNDCX = (x + 0.5f) / imageWidth * 2 - 1;
             float pixelNDCY = (y + 0.5f) / imageHeight * 2 - 1;
-            Vector3 pixelCameraSpace = new Vector3(pixelNDCX * scale * aspectRatio, -pixelNDCY * scale, -1);
+            Vector3 pixelCameraSpace = new Vector3(pixelNDCX * scale * aspectRatio, -pixelNDCY * scale, 1);
 
             Vector3 right = Vector3.Normalize(Vector3.Cross(Up, Forward));
             Vector3 rayDirection = Vector3.Normalize(pixelCameraSpace.X * right + pixelCameraSpace.Y * Up + pixelCameraSpace.Z * Forward);
@@ -195,7 +192,6 @@ namespace RayTracingConsoleApp
             float b = 2.0f * Vector3.Dot(oc, ray.Direction);
             float c = Vector3.Dot(oc, oc) - Radius * Radius;
             float discriminant = b * b - 4 * a * c;
-
 
             if (discriminant < 0)
             {
