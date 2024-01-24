@@ -14,8 +14,9 @@ namespace RayTracingConsoleApp
             Bitmap image = new Bitmap(width, height);
 
             // Adjust the positions of the spheres if necessary
-            Sphere testSphere = new Sphere(new Vector3(width / 2, height / 2, 500), 300, Color.Red, true, 0.9f);
-            Sphere[] spheres = { testSphere };
+            Sphere reflectiveSphere = new Sphere(new Vector3(width / 2, height / 2, 1000), 150, Color.Gray, true, 0.9f);
+            Sphere coloredSphere = new Sphere(new Vector3(width / 2 + 150, height / 2, 1000), 100, Color.Red, false, 0.0f);
+            Sphere[] spheres = { reflectiveSphere, coloredSphere };
 
             // Set up the camera to look at the center of the scene where the spheres are
             Vector3 cameraPosition = new Vector3(width / 2, height / 2, 0);
@@ -154,7 +155,7 @@ namespace RayTracingConsoleApp
         public Ray GetRayThroughPixel(int x, int y, int imageWidth, int imageHeight)
         {
             float aspectRatio = (float)imageWidth / imageHeight;
-            float fovRadians = MathF.PI / 3; // 45 degrees field of view in radians
+            float fovRadians = MathF.PI / 4; // 45 degrees field of view in radians
             float scale = MathF.Tan(fovRadians / 2);
 
             float pixelNDCX = (x + 0.5f) / imageWidth * 2 - 1;
